@@ -128,6 +128,15 @@ def _build_prompt(reports: list[CategorizedReport]) -> str:
     from .i18n import get_category_label
 
     parts: list[str] = []
+
+    context_parts = [r.stats.project_context for r in reports if r.stats.project_context]
+    if context_parts:
+        parts.append("=== Project Context ===")
+        parts.append("\n\n".join(context_parts))
+        parts.append("")
+        parts.append("=== Commit Data ===")
+        parts.append("")
+
     for report in reports:
         parts.append(f"Repository: {report.stats.repo_name}")
         parts.append(f"Period: {report.since} ~ {report.until}")
@@ -161,12 +170,12 @@ def _build_prompt(reports: list[CategorizedReport]) -> str:
     return "\n".join(parts)
 
 
-def generate_summary(
+def _create_llm_client_and_params(
     reports: list[CategorizedReport],
     config: LLMConfig,
     style: str = DEFAULT_STYLE,
-) -> str:
-    """Call OpenAI-compatible API to generate a narrative summary."""
+) -> tuple:
+    """Shared setup for both streaming and non-streaming summary generation."""
     try:
         from openai import OpenAI
     except ImportError:
@@ -176,18 +185,49 @@ def generate_summary(
         )
 
     client = OpenAI(api_key=config.api_key, base_url=config.base_url)
-
     user_content = _build_prompt(reports)
     max_tokens = 1024 if style == "dev" else 2048
+    messages = [
+        {"role": "system", "content": _get_system_prompt(style)},
+        {"role": "user", "content": user_content},
+    ]
+    return client, messages, max_tokens
 
+
+def generate_summary(
+    reports: list[CategorizedReport],
+    config: LLMConfig,
+    style: str = DEFAULT_STYLE,
+) -> str:
+    """Call OpenAI-compatible API to generate a narrative summary."""
+    client, messages, max_tokens = _create_llm_client_and_params(
+        reports, config, style
+    )
     response = client.chat.completions.create(
         model=config.model,
-        messages=[
-            {"role": "system", "content": _get_system_prompt(style)},
-            {"role": "user", "content": user_content},
-        ],
+        messages=messages,
         temperature=0.3,
         max_tokens=max_tokens,
     )
-
     return response.choices[0].message.content or ""
+
+
+def generate_summary_stream(
+    reports: list[CategorizedReport],
+    config: LLMConfig,
+    style: str = DEFAULT_STYLE,
+):
+    """Stream AI summary chunks from OpenAI-compatible API."""
+    client, messages, max_tokens = _create_llm_client_and_params(
+        reports, config, style
+    )
+    stream = client.chat.completions.create(
+        model=config.model,
+        messages=messages,
+        temperature=0.3,
+        max_tokens=max_tokens,
+        stream=True,
+    )
+    for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content

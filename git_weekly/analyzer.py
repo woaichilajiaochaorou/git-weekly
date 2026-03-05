@@ -46,6 +46,22 @@ CATEGORY_ORDER: list[str] = ["feat", "fix", "refactor", "docs", "test", "chore",
 MAX_DIFF_PER_COMMIT = 2000
 MAX_TOTAL_DIFF = 12000
 
+MAX_README_CHARS = 1500
+MAX_CONFIG_CHARS = 500
+MAX_CONTEXT_TOTAL = 3000
+
+CONTEXT_FILES: list[tuple[str, int]] = [
+    ("README.md", MAX_README_CHARS),
+    ("README.rst", MAX_README_CHARS),
+    ("README", MAX_README_CHARS),
+    ("pyproject.toml", MAX_CONFIG_CHARS),
+    ("package.json", MAX_CONFIG_CHARS),
+    ("Cargo.toml", MAX_CONFIG_CHARS),
+    ("go.mod", MAX_CONFIG_CHARS),
+    ("setup.cfg", MAX_CONFIG_CHARS),
+    ("pom.xml", MAX_CONFIG_CHARS),
+]
+
 
 @dataclass
 class CommitInfo:
@@ -68,6 +84,7 @@ class RepoStats:
     total_files_changed: int = 0
     total_insertions: int = 0
     total_deletions: int = 0
+    project_context: str = ""
 
     @property
     def total_commits(self) -> int:
@@ -251,6 +268,39 @@ def collect_diffs(stats: RepoStats) -> None:
         diff_text = "\n".join(lines)
         commit.diff = diff_text
         budget -= len(diff_text)
+
+
+def collect_project_context(stats: RepoStats) -> None:
+    """Read key project files (README, config) to provide LLM with project background."""
+    repo = Path(stats.repo_path)
+    parts: list[str] = []
+    budget = MAX_CONTEXT_TOTAL
+    seen_readme = False
+
+    for filename, max_chars in CONTEXT_FILES:
+        if budget <= 0:
+            break
+        filepath = repo / filename
+        if not filepath.is_file():
+            continue
+        if filename.upper().startswith("README"):
+            if seen_readme:
+                continue
+            seen_readme = True
+        try:
+            text = filepath.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        if not text.strip():
+            continue
+        limit = min(max_chars, budget)
+        truncated = text[:limit]
+        if len(text) > limit:
+            truncated += "\n... (truncated)"
+        parts.append(f"--- {filename} ---\n{truncated}")
+        budget -= len(truncated)
+
+    stats.project_context = "\n\n".join(parts)
 
 
 def categorize_commit(commit: CommitInfo) -> str:

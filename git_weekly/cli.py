@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .analyzer import (
     collect_diffs,
+    collect_project_context,
     find_author_aliases,
     get_default_since,
     get_default_until,
@@ -163,6 +164,25 @@ def _load_template_config() -> TemplateConfig:
     )
 
 
+def _stream_ai_summary(reports, llm_cfg, style):
+    """Stream AI summary to terminal with real-time output."""
+    from .llm import generate_summary_stream
+
+    BOLD = "\033[1m"
+    RESET = "\033[0m"
+
+    print(f"{BOLD}{t('report.section.ai')}{RESET}\n")
+    sys.stdout.write("  ")
+    sys.stdout.flush()
+    try:
+        for chunk in generate_summary_stream(reports, llm_cfg, style=style):
+            sys.stdout.write(chunk.replace("\n", "\n  "))
+            sys.stdout.flush()
+        print("\n")
+    except RuntimeError as e:
+        print(f"\n{t('msg.ai_failed', error=str(e))}", file=sys.stderr)
+
+
 def main():
     """Generate weekly report from Git commit history."""
     if len(sys.argv) >= 2 and sys.argv[1] == "init":
@@ -232,6 +252,10 @@ examples:
         help="Skip collecting diff content (faster, but AI summary less detailed)",
     )
     parser.add_argument(
+        "--no-context", action="store_true", default=False,
+        help="Skip reading project files (README, config) for AI context",
+    )
+    parser.add_argument(
         "--lang", default="zh", choices=["zh", "en"],
         help="Output language: zh (Chinese, default) or en (English)",
     )
@@ -297,12 +321,17 @@ examples:
         print(t("warn.no_repos"), file=sys.stderr)
         sys.exit(0)
 
+    ai_stream_ctx = None
+
     if args.ai:
+        if not args.no_context:
+            for report in reports:
+                collect_project_context(report.stats)
         if not args.no_diff:
             for report in reports:
                 collect_diffs(report.stats)
         try:
-            from .llm import _load_config_file, generate_summary, load_config
+            from .llm import _load_config_file, generate_summary, generate_summary_stream, load_config
 
             llm_cfg = load_config(
                 api_key=args.api_key,
@@ -312,10 +341,14 @@ examples:
             style = args.style
             if style == "dev" and "--style" not in sys.argv:
                 style = _load_config_file().get("style", "dev")
-            print(t("msg.ai_generating"), file=sys.stderr)
-            summary = generate_summary(reports, llm_cfg, style=style)
-            for report in reports:
-                report.ai_summary = summary
+
+            if args.output:
+                print(t("msg.ai_generating"), file=sys.stderr)
+                summary = generate_summary(reports, llm_cfg, style=style)
+                for report in reports:
+                    report.ai_summary = summary
+            else:
+                ai_stream_ctx = (reports, llm_cfg, style)
         except RuntimeError as e:
             print(t("msg.ai_failed", error=str(e)), file=sys.stderr)
 
@@ -327,6 +360,8 @@ examples:
         print(t("msg.saved", path=args.output))
     else:
         render_terminal(reports, tpl=tpl)
+        if ai_stream_ctx and "ai" in tpl.sections:
+            _stream_ai_summary(*ai_stream_ctx)
 
 
 if __name__ == "__main__":
