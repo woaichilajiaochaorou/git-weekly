@@ -1,5 +1,9 @@
 # git-weekly
 
+[![CI](https://github.com/woaichilajiaochaorou/git-weekly/actions/workflows/ci.yml/badge.svg)](https://github.com/woaichilajiaochaorou/git-weekly/actions/workflows/ci.yml)
+[![PyPI version](https://img.shields.io/pypi/v/git-weekly)](https://pypi.org/project/git-weekly/)
+[![Python](https://img.shields.io/pypi/pyversions/git-weekly)](https://pypi.org/project/git-weekly/)
+
 > Generate weekly reports from Git commits, with AI-powered summary.
 >
 > 从 Git 提交记录自动生成周报，支持 AI 智能总结。告别"我这周干了啥"的灵魂拷问。
