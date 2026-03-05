@@ -51,6 +51,10 @@ CATEGORY_PATTERNS: dict[str, dict[str, object]] = {
 CATEGORY_ORDER: list[str] = ["feat", "fix", "refactor", "docs", "test", "chore", "style", "other"]
 
 
+MAX_DIFF_PER_COMMIT = 2000
+MAX_TOTAL_DIFF = 12000
+
+
 @dataclass
 class CommitInfo:
     hash: str
@@ -61,6 +65,7 @@ class CommitInfo:
     insertions: int = 0
     deletions: int = 0
     files: list[str] = field(default_factory=list)
+    diff: str = ""
 
 
 @dataclass
@@ -174,6 +179,41 @@ def parse_commits(
     stats.total_deletions = sum(c.deletions for c in commits)
 
     return stats
+
+
+def collect_diffs(stats: RepoStats) -> None:
+    """Fetch diff content for each commit, truncated to stay within token budget."""
+    budget = MAX_TOTAL_DIFF
+    for commit in stats.commits:
+        if budget <= 0:
+            break
+        try:
+            raw = _run_git(
+                ["show", commit.hash, "--format=", "--patch", "--no-color",
+                 "--diff-filter=AMCR", "--no-ext-diff"],
+                cwd=stats.repo_path,
+            )
+        except RuntimeError:
+            continue
+        lines: list[str] = []
+        size = 0
+        per_commit_budget = min(MAX_DIFF_PER_COMMIT, budget)
+        for line in raw.split("\n"):
+            if line.startswith("diff --git"):
+                lines.append(line)
+            elif line.startswith("@@"):
+                lines.append(line)
+            elif line.startswith(("+", "-")) and not line.startswith(("+++", "---")):
+                lines.append(line)
+            else:
+                continue
+            size += len(line) + 1
+            if size >= per_commit_budget:
+                lines.append("... (truncated)")
+                break
+        diff_text = "\n".join(lines)
+        commit.diff = diff_text
+        budget -= len(diff_text)
 
 
 def categorize_commit(commit: CommitInfo) -> str:

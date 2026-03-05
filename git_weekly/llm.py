@@ -25,13 +25,14 @@ DEFAULT_BASE_URL = "https://api.openai.com/v1"
 DEFAULT_MODEL = "gpt-4o-mini"
 
 SYSTEM_PROMPT = """\
-你是一位专业的技术周报撰写助手。根据提供的 Git commit 数据，写一段 3-5 句话的工作总结。
+你是一位专业的技术周报撰写助手。根据提供的 Git commit 数据和代码 diff，写一段 3-5 句话的工作总结。
 
 要求：
 - 用中文输出
 - 像开发者写给团队看的周报，语气专业但不生硬
+- 基于 diff 内容理解实际代码变更，总结技术细节和设计决策
 - 突出本周重点工作和技术亮点，不要逐条罗列 commit
-- 如果有 bug fix，简要提及稳定性改进
+- 如果有 bug fix，简要提及稳定性改进和修复的具体问题
 - 如果有重构，说明技术改进的意义
 - 不要编造不存在的内容，只基于提供的数据总结
 """
@@ -122,6 +123,17 @@ def _build_prompt(reports: list[CategorizedReport]) -> str:
                     file_hint = f" ({', '.join(top_files)})"
                 parts.append(f"  - {c.message}{file_hint}")
             parts.append("")
+
+        diffs_with_content = [
+            c for c in report.stats.commits if c.diff
+        ]
+        if diffs_with_content:
+            parts.append("--- 代码变更详情 ---")
+            parts.append("")
+            for c in diffs_with_content:
+                parts.append(f"[{c.hash[:8]}] {c.message}")
+                parts.append(c.diff)
+                parts.append("")
 
     return "\n".join(parts)
 

@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from .analyzer import get_default_since, get_default_until, get_git_user, parse_commits
+from .analyzer import collect_diffs, get_default_since, get_default_until, get_git_user, parse_commits
 from .report import build_report, render_markdown, render_terminal
 
 
@@ -67,6 +67,10 @@ examples:
         "--model", default=None,
         help="LLM model name (default: gpt-4o-mini)",
     )
+    parser.add_argument(
+        "--no-diff", action="store_true", default=False,
+        help="Skip collecting diff content (faster, but AI summary less detailed)",
+    )
 
     args = parser.parse_args()
 
@@ -102,6 +106,9 @@ examples:
         sys.exit(0)
 
     if args.ai:
+        if not args.no_diff:
+            for report in reports:
+                collect_diffs(report.stats)
         try:
             from .llm import generate_summary, load_config
 
