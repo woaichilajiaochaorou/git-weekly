@@ -16,7 +16,7 @@ from .analyzer import (
     parse_commits,
 )
 from .i18n import set_lang, t
-from .report import build_report, render_markdown, render_terminal
+from .report import TemplateConfig, build_report, render_markdown, render_terminal
 
 PROVIDERS = [
     {"name": "OpenAI", "base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
@@ -90,6 +90,20 @@ def _init_config() -> None:
     while style not in ("dev", "manager"):
         style = input("AI 报告风格 dev(技术)/manager(商业) [dev]: ").strip() or "dev"
 
+    # --- Template options ---
+    print(f"\n{BOLD}报告模板配置 (可选, 直接回车跳过):{RESET}\n")
+
+    custom_title = input(f"自定义标题 {DIM}(默认: 周报){RESET}: ").strip()
+
+    show_hash_input = input(f"显示 commit hash? y/N [{DIM}N{RESET}]: ").strip().lower()
+    show_hash = show_hash_input in ("y", "yes")
+
+    show_date_input = input(f"显示提交日期? y/N [{DIM}N{RESET}]: ").strip().lower()
+    show_date = show_date_input in ("y", "yes")
+
+    show_author_input = input(f"显示作者名? y/N [{DIM}N{RESET}]: ").strip().lower()
+    show_author = show_author_input in ("y", "yes")
+
     # --- Write config ---
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -103,7 +117,15 @@ def _init_config() -> None:
         "[general]",
         f'lang = "{lang}"',
         "",
+        "[template]",
     ]
+    if custom_title:
+        lines.append(f'title = "{custom_title}"')
+    lines.append(f"show_hash = {'true' if show_hash else 'false'}")
+    lines.append(f"show_date = {'true' if show_date else 'false'}")
+    lines.append(f"show_author = {'true' if show_author else 'false'}")
+    lines.append('sections = ["work", "stats", "ai"]')
+    lines.append("")
     config_text = "\n".join(lines)
 
     if CONFIG_FILE.exists():
@@ -118,6 +140,27 @@ def _init_config() -> None:
     print(f"\n{DIM}现在可以直接运行:{RESET}")
     print(f"  {BOLD}git-weekly --ai{RESET}")
     print()
+
+
+def _load_template_config() -> TemplateConfig:
+    """Load [template] section from config and build TemplateConfig."""
+    from .llm import load_template_config
+    raw = load_template_config()
+    if not raw:
+        return TemplateConfig()
+    default_sections = ["work", "stats", "ai"]
+    sections_raw = raw.get("sections")
+    if isinstance(sections_raw, (list, tuple)):
+        sections = list(sections_raw)
+    else:
+        sections = default_sections
+    return TemplateConfig(
+        title=raw.get("title", ""),
+        show_hash=raw.get("show_hash", False),
+        show_date=raw.get("show_date", False),
+        show_author=raw.get("show_author", False),
+        sections=sections,
+    )
 
 
 def main():
@@ -276,12 +319,14 @@ examples:
         except RuntimeError as e:
             print(t("msg.ai_failed", error=str(e)), file=sys.stderr)
 
+    tpl = _load_template_config()
+
     if args.output:
-        md = render_markdown(reports)
+        md = render_markdown(reports, tpl=tpl)
         Path(args.output).write_text(md, encoding="utf-8")
         print(t("msg.saved", path=args.output))
     else:
-        render_terminal(reports)
+        render_terminal(reports, tpl=tpl)
 
 
 if __name__ == "__main__":

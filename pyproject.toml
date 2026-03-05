@@ -13,7 +13,7 @@ dependencies = []
 authors = [
     {name = "woaichilajiaochaorou"},
 ]
-keywords = ["git", "weekly", "report", "changelog", "productivity", "ai", "llm"]
+keywords = ["git", "weekly", "report", "changelog", "productivity", "ai", "llm", "mcp"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -36,6 +36,13 @@ Issues = "https://github.com/woaichilajiaochaorou/git-weekly/issues"
 ai = [
     "openai>=1.0",
 ]
+mcp = [
+    "mcp>=1.0",
+]
+all = [
+    "openai>=1.0",
+    "mcp>=1.0",
+]
 dev = [
     "pytest>=7.0",
     "ruff>=0.4",
@@ -43,6 +50,7 @@ dev = [
 
 [project.scripts]
 git-weekly = "git_weekly.cli:main"
+git-weekly-mcp = "git_weekly.mcp_server:main"
 
 [tool.ruff]
 line-length = 100

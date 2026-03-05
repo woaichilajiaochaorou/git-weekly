@@ -30,6 +30,19 @@ DEFAULT_STYLE = "dev"
 
 
 def _get_system_prompt(style: str = DEFAULT_STYLE) -> str:
+    """Get AI system prompt: custom config > built-in i18n."""
+    ai_cfg = _load_config_file()
+
+    custom_prompt = ai_cfg.get("prompt", "").strip()
+    if custom_prompt:
+        return custom_prompt
+
+    prompt_file = ai_cfg.get("prompt_file", "").strip()
+    if prompt_file:
+        p = Path(prompt_file).expanduser()
+        if p.exists():
+            return p.read_text(encoding="utf-8").strip()
+
     from .i18n import t
     return t(f"llm.system_prompt.{style}")
 
@@ -60,6 +73,11 @@ def _load_config_file() -> dict[str, str]:
 def load_general_config() -> dict[str, str]:
     """Load [general] section from config file."""
     return _load_toml().get("general", {})
+
+
+def load_template_config() -> dict:
+    """Load [template] section from config file."""
+    return _load_toml().get("template", {})
 
 
 def load_config(

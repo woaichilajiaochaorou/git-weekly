@@ -18,6 +18,7 @@
 - **多语言支持**：中文 / English（`--lang en`）
 - **交互式配置**：`git-weekly init` 一键配置 AI 参数
 - **AI 智能总结**：接入 OpenAI 兼容 API，基于 commit + diff 内容生成连贯的工作总结
+- **MCP Server**：支持 Claude Desktop / Cursor / VS Code Copilot 原生调用
 - **Cursor Agent Skill**：在 Cursor IDE 中直接让 AI 助手生成周报
 
 ## 安装
@@ -213,6 +214,34 @@ model = "gpt-4o-mini"
 
 [general]
 lang = "zh"
+
+[template]
+# title = "开发周报"          # 自定义报告标题
+show_hash = false              # 显示 commit hash
+show_date = false              # 显示提交日期
+show_author = false            # 显示作者名
+sections = ["work", "stats", "ai"]  # 报告包含的章节
+```
+
+### 自定义模板
+
+通过 `[template]` 配置可以定制报告格式：
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `title` | string | 周报 / Weekly Report | 自定义报告标题 |
+| `show_hash` | bool | false | 每条 commit 前显示短 hash |
+| `show_date` | bool | false | 每条 commit 前显示日期 |
+| `show_author` | bool | false | 每条 commit 前显示作者 |
+| `sections` | list | ["work", "stats", "ai"] | 报告包含哪些章节 |
+
+例如，只保留工作内容和 AI 总结，并显示 commit hash：
+
+```toml
+[template]
+title = "技术周报"
+show_hash = true
+sections = ["work", "ai"]
 ```
 
 ### Diff 分析
@@ -236,15 +265,72 @@ git-weekly --ai --no-diff
 | 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
 | Ollama (本地) | `http://localhost:11434/v1` | `llama3` |
 
+## MCP Server
+
+git-weekly 可作为 [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) Server 运行，让 Claude Desktop、Cursor、VS Code Copilot 等 AI 客户端原生调用。
+
+### 安装
+
+```bash
+pip install "git-weekly[mcp]"
+
+# 或一次性安装所有功能
+pip install "git-weekly[all]"
+```
+
+### 暴露的工具
+
+| 工具 | 说明 |
+|------|------|
+| `generate_weekly_report` | 生成周报（Markdown 格式），支持指定仓库、时间范围、语言、AI 总结 |
+| `get_commit_stats` | 返回结构化的 commit 统计数据（JSON 格式） |
+
+### 配置 Claude Desktop
+
+编辑 `claude_desktop_config.json`：
+
+```json
+{
+  "mcpServers": {
+    "git-weekly": {
+      "command": "git-weekly-mcp"
+    }
+  }
+}
+```
+
+然后对 Claude 说 "帮我生成这周的周报"，Claude 会自动调用 `generate_weekly_report` 工具。
+
+### 配置 Cursor
+
+在 Cursor 设置中添加 MCP Server：
+
+```json
+{
+  "mcpServers": {
+    "git-weekly": {
+      "command": "git-weekly-mcp"
+    }
+  }
+}
+```
+
+### 手动测试
+
+```bash
+# 启动 MCP Server（stdio 模式）
+git-weekly-mcp
+
+# 用 MCP Inspector 调试
+npx @modelcontextprotocol/inspector git-weekly-mcp
+```
+
 ## Cursor Agent Skill
 
-本项目内置了 Cursor Agent Skill（`.cursor/skills/git-weekly/`），在 Cursor IDE 中可以直接让 AI 助手帮你生成周报：
+本项目也内置了 Cursor Agent Skill（`.cursor/skills/git-weekly/`），作为 MCP 的轻量替代方案：
 
 - "帮我生成本周周报"
 - "generate my weekly report"
-- "用 AI 总结一下我这周的工作"
-
-Cursor 会自动识别 Skill 并调用 `git-weekly` 命令。
 
 如需在所有项目中使用，可将 Skill 复制到个人目录：
 

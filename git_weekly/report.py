@@ -3,11 +3,21 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from .analyzer import CATEGORY_ORDER, CommitInfo, RepoStats, categorize_commit
 from .i18n import get_category_label, t
+
+
+@dataclass
+class TemplateConfig:
+    """User-customizable report template options."""
+    title: str = ""
+    show_hash: bool = False
+    show_date: bool = False
+    show_author: bool = False
+    sections: list[str] = field(default_factory=lambda: ["work", "stats", "ai"])
 
 
 @dataclass
@@ -34,6 +44,24 @@ def build_report(stats: RepoStats, since: str, until: str) -> CategorizedReport:
     )
 
 
+def _format_commit_line(commit: CommitInfo, tpl: TemplateConfig) -> str:
+    """Format a single commit line with optional hash/date/author."""
+    parts: list[str] = []
+    if tpl.show_hash:
+        parts.append(commit.hash[:8])
+    if tpl.show_date:
+        parts.append(commit.date.strftime("%m-%d"))
+    if tpl.show_author:
+        parts.append(commit.author)
+    msg = commit.message
+    if len(msg) > 72:
+        msg = msg[:72] + "..."
+    if parts:
+        prefix = " ".join(parts)
+        return f"[{prefix}] {msg}"
+    return msg
+
+
 def _format_date_range(since: str, until: str) -> str:
     try:
         s = datetime.strptime(since, "%Y-%m-%d")
@@ -43,8 +71,14 @@ def _format_date_range(since: str, until: str) -> str:
         return f"{since} ~ {until}"
 
 
-def render_terminal(reports: list[CategorizedReport]) -> None:
+def render_terminal(
+    reports: list[CategorizedReport],
+    tpl: TemplateConfig | None = None,
+) -> None:
     """Render reports to terminal with ANSI colors."""
+    if tpl is None:
+        tpl = TemplateConfig()
+
     BOLD = "\033[1m"
     CYAN = "\033[36m"
     GREEN = "\033[32m"
@@ -54,7 +88,8 @@ def render_terminal(reports: list[CategorizedReport]) -> None:
 
     for report in reports:
         date_range = _format_date_range(report.since, report.until)
-        title = f" {t('report.title')} ({date_range})"
+        title_text = tpl.title or t("report.title")
+        title = f" {title_text} ({date_range})"
         if len(reports) > 1:
             title += f" — {report.stats.repo_name}"
 
@@ -68,42 +103,48 @@ def render_terminal(reports: list[CategorizedReport]) -> None:
             print(f"\n  {DIM}{t('report.no_commits')}{RESET}\n")
             continue
 
-        print(f"\n{BOLD}{t('report.section.work')}{RESET}\n")
+        if "work" in tpl.sections:
+            print(f"\n{BOLD}{t('report.section.work')}{RESET}\n")
+            for cat_key in CATEGORY_ORDER:
+                if cat_key not in report.categories:
+                    continue
+                commits = report.categories[cat_key]
+                label = get_category_label(cat_key)
+                print(f"  {BOLD}{label}{RESET}")
+                for commit in commits:
+                    line = _format_commit_line(commit, tpl)
+                    print(f"    • {line}")
+                print()
 
-        for cat_key in CATEGORY_ORDER:
-            if cat_key not in report.categories:
-                continue
-            commits = report.categories[cat_key]
-            label = get_category_label(cat_key)
-            print(f"  {BOLD}{label}{RESET}")
-            for commit in commits:
-                msg = commit.message
-                if len(msg) > 72:
-                    msg = msg[:72] + "..."
-                print(f"    • {msg}")
+        if "stats" in tpl.sections:
+            print(f"{BOLD}{t('report.section.stats')}{RESET}\n")
+            print(f"  {t('stats.commits')}  {BOLD}{report.stats.total_commits}{RESET}{t('stats.commits_unit')}")
+            print(f"  {t('stats.files')}  {BOLD}{report.stats.total_files_changed}{RESET}{t('stats.files_unit')}")
+            print(f"  {t('stats.insertions')}  {GREEN}+{report.stats.total_insertions}{RESET}")
+            print(f"  {t('stats.deletions')}  {RED}-{report.stats.total_deletions}{RESET}")
             print()
 
-        print(f"{BOLD}{t('report.section.stats')}{RESET}\n")
-        print(f"  {t('stats.commits')}  {BOLD}{report.stats.total_commits}{RESET}{t('stats.commits_unit')}")
-        print(f"  {t('stats.files')}  {BOLD}{report.stats.total_files_changed}{RESET}{t('stats.files_unit')}")
-        print(f"  {t('stats.insertions')}  {GREEN}+{report.stats.total_insertions}{RESET}")
-        print(f"  {t('stats.deletions')}  {RED}-{report.stats.total_deletions}{RESET}")
-        print()
-
-        if report.ai_summary:
+        if "ai" in tpl.sections and report.ai_summary:
             print(f"{BOLD}{t('report.section.ai')}{RESET}\n")
             for line in report.ai_summary.strip().splitlines():
                 print(f"  {line}")
             print()
 
 
-def render_markdown(reports: list[CategorizedReport]) -> str:
+def render_markdown(
+    reports: list[CategorizedReport],
+    tpl: TemplateConfig | None = None,
+) -> str:
     """Render reports as Markdown string."""
+    if tpl is None:
+        tpl = TemplateConfig()
+
     lines: list[str] = []
 
     for report in reports:
         date_range = _format_date_range(report.since, report.until)
-        heading = f"{t('report.title')} ({date_range})"
+        title_text = tpl.title or t("report.title")
+        heading = f"{title_text} ({date_range})"
         if len(reports) > 1:
             heading += f" — {report.stats.repo_name}"
 
@@ -115,31 +156,33 @@ def render_markdown(reports: list[CategorizedReport]) -> str:
             lines.append("")
             continue
 
-        lines.append(f"## {t('report.section.work')}")
-        lines.append("")
-
-        for cat_key in CATEGORY_ORDER:
-            if cat_key not in report.categories:
-                continue
-            commits = report.categories[cat_key]
-            label = get_category_label(cat_key)
-            lines.append(f"### {label}")
+        if "work" in tpl.sections:
+            lines.append(f"## {t('report.section.work')}")
             lines.append("")
-            for commit in commits:
-                lines.append(f"- {commit.message}")
+            for cat_key in CATEGORY_ORDER:
+                if cat_key not in report.categories:
+                    continue
+                commits = report.categories[cat_key]
+                label = get_category_label(cat_key)
+                lines.append(f"### {label}")
+                lines.append("")
+                for commit in commits:
+                    line = _format_commit_line(commit, tpl)
+                    lines.append(f"- {line}")
+                lines.append("")
+
+        if "stats" in tpl.sections:
+            lines.append(f"## {t('report.section.stats')}")
+            lines.append("")
+            lines.append(f"| {t('md.metric')} | {t('md.value')} |")
+            lines.append("|------|------|")
+            lines.append(f"| {t('stats.commits')} | {report.stats.total_commits}{t('stats.commits_unit')} |")
+            lines.append(f"| {t('stats.files')} | {report.stats.total_files_changed}{t('stats.files_unit')} |")
+            lines.append(f"| {t('stats.insertions')} | +{report.stats.total_insertions} |")
+            lines.append(f"| {t('stats.deletions')} | -{report.stats.total_deletions} |")
             lines.append("")
 
-        lines.append(f"## {t('report.section.stats')}")
-        lines.append("")
-        lines.append(f"| {t('md.metric')} | {t('md.value')} |")
-        lines.append("|------|------|")
-        lines.append(f"| {t('stats.commits')} | {report.stats.total_commits}{t('stats.commits_unit')} |")
-        lines.append(f"| {t('stats.files')} | {report.stats.total_files_changed}{t('stats.files_unit')} |")
-        lines.append(f"| {t('stats.insertions')} | +{report.stats.total_insertions} |")
-        lines.append(f"| {t('stats.deletions')} | -{report.stats.total_deletions} |")
-        lines.append("")
-
-        if report.ai_summary:
+        if "ai" in tpl.sections and report.ai_summary:
             lines.append(f"## {t('report.section.ai')}")
             lines.append("")
             lines.append(report.ai_summary.strip())

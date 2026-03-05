@@ -97,9 +97,21 @@ Interactive wizard that configures LLM provider (OpenAI/DeepSeek/Qwen/Ollama), A
 | `--base-url URL` | LLM API endpoint |
 | `--model NAME` | LLM model name |
 
+## MCP Server
+
+git-weekly also runs as an MCP Server for native tool integration:
+
+```bash
+pip install "git-weekly[mcp]"
+git-weekly-mcp   # starts stdio MCP server
+```
+
+Exposes tools: `generate_weekly_report`, `get_commit_stats`
+
 ## Execution Notes
 
 - Must run in (or point `--repo` to) a valid Git repository
 - The tool reads `git config user.name` to filter commits by default
 - AI features require `openai` package: `pip install "git-weekly[ai]"`
+- MCP features require: `pip install "git-weekly[mcp]"`
 - Config file location: `~/.config/git-weekly/config.toml`
