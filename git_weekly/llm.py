@@ -170,6 +170,19 @@ def _build_prompt(reports: list[CategorizedReport]) -> str:
     return "\n".join(parts)
 
 
+def _create_openai_client(config: LLMConfig):
+    """Create OpenAI client, bypassing HTTP proxy to avoid LibreSSL TLS issues."""
+    from openai import OpenAI
+    import httpx
+
+    http_client = httpx.Client(trust_env=False)
+    return OpenAI(
+        api_key=config.api_key,
+        base_url=config.base_url,
+        http_client=http_client,
+    )
+
+
 def _create_llm_client_and_params(
     reports: list[CategorizedReport],
     config: LLMConfig,
@@ -184,7 +197,7 @@ def _create_llm_client_and_params(
             '  pip install "git-weekly[ai]"'
         )
 
-    client = OpenAI(api_key=config.api_key, base_url=config.base_url)
+    client = _create_openai_client(config)
     user_content = _build_prompt(reports)
     max_tokens = 1024 if style == "dev" else 2048
     messages = [

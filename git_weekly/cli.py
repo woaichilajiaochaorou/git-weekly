@@ -179,7 +179,7 @@ def _stream_ai_summary(reports, llm_cfg, style):
             sys.stdout.write(chunk.replace("\n", "\n  "))
             sys.stdout.flush()
         print("\n")
-    except RuntimeError as e:
+    except Exception as e:
         print(f"\n{t('msg.ai_failed', error=str(e))}", file=sys.stderr)
 
 
