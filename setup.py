@@ -1,9 +1,5 @@
-from setuptools import setup, find_packages
+# Thin shim for editable installs with pip < 21.3 (no PEP 660 support).
+# All config lives in pyproject.toml.
+from setuptools import setup
 
-setup(
-    name="git-weekly",
-    version="0.1.0",
-    packages=find_packages(),
-    install_requires=["click>=8.0", "rich>=13.0"],
-    entry_points={"console_scripts": ["git-weekly=git_weekly.cli:main"]},
-)
+setup()

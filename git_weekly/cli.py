@@ -1,4 +1,6 @@
-"""Command-line interface for git-weekly (zero dependencies)."""
+"""Command-line interface for git-weekly."""
+
+from __future__ import annotations
 
 import argparse
 import sys
@@ -21,6 +23,8 @@ examples:
   git-weekly --repo ./proj-a --repo ./proj-b    # 多仓库聚合
   git-weekly -o report.md                       # 输出 Markdown 文件
   git-weekly --all-authors                      # 包含所有人的提交
+  git-weekly --ai                               # AI 智能总结
+  git-weekly --ai --base-url https://api.deepseek.com/v1  # 用 DeepSeek
 """,
     )
     parser.add_argument(
@@ -46,6 +50,22 @@ examples:
     parser.add_argument(
         "--all-authors", action="store_true", default=False,
         help="Include commits from all authors",
+    )
+    parser.add_argument(
+        "--ai", action="store_true", default=False,
+        help="Enable AI-powered summary (requires: pip install git-weekly[ai])",
+    )
+    parser.add_argument(
+        "--api-key", default=None,
+        help="LLM API key (or set GIT_WEEKLY_API_KEY env var)",
+    )
+    parser.add_argument(
+        "--base-url", default=None,
+        help="LLM API base URL (default: OpenAI; set for DeepSeek/Ollama/etc.)",
+    )
+    parser.add_argument(
+        "--model", default=None,
+        help="LLM model name (default: gpt-4o-mini)",
     )
 
     args = parser.parse_args()
@@ -80,6 +100,22 @@ examples:
     if not reports:
         print("No repositories to analyze.", file=sys.stderr)
         sys.exit(0)
+
+    if args.ai:
+        try:
+            from .llm import generate_summary, load_config
+
+            llm_cfg = load_config(
+                api_key=args.api_key,
+                base_url=args.base_url,
+                model=args.model,
+            )
+            print("Generating AI summary...", file=sys.stderr)
+            summary = generate_summary(reports, llm_cfg)
+            for report in reports:
+                report.ai_summary = summary
+        except RuntimeError as e:
+            print(f"AI summary failed: {e}", file=sys.stderr)
 
     if args.output:
         md = render_markdown(reports)

@@ -1,24 +1,27 @@
 """Report generation and formatting."""
 
+from __future__ import annotations
+
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 
-from .analyzer import CATEGORY_PATTERNS, CommitInfo, RepoStats, categorize_commit
+from .analyzer import CATEGORY_ORDER, CATEGORY_PATTERNS, CommitInfo, RepoStats, categorize_commit
 
 
 @dataclass
 class CategorizedReport:
     """Commits grouped by category with summary info."""
-    categories: dict
+    categories: dict[str, list[CommitInfo]]
     stats: RepoStats
     since: str
     until: str
+    ai_summary: str | None = None
 
 
 def build_report(stats: RepoStats, since: str, until: str) -> CategorizedReport:
     """Categorize commits and build a structured report."""
-    categories = defaultdict(list)
+    categories: dict[str, list[CommitInfo]] = defaultdict(list)
     for commit in stats.commits:
         cat = categorize_commit(commit)
         categories[cat].append(commit)
@@ -39,19 +42,18 @@ def _format_date_range(since: str, until: str) -> str:
         return f"{since} ~ {until}"
 
 
-def render_terminal(reports: list):
+def render_terminal(reports: list[CategorizedReport]) -> None:
     """Render reports to terminal with ANSI colors."""
     BOLD = "\033[1m"
     CYAN = "\033[36m"
     GREEN = "\033[32m"
     RED = "\033[31m"
     DIM = "\033[2m"
-    YELLOW = "\033[33m"
     RESET = "\033[0m"
 
     for report in reports:
         date_range = _format_date_range(report.since, report.until)
-        title = f" 📋 周报 ({date_range})"
+        title = f" \U0001f4cb 周报 ({date_range})"
         if len(reports) > 1:
             title += f" — {report.stats.repo_name}"
 
@@ -67,12 +69,11 @@ def render_terminal(reports: list):
 
         print(f"\n{BOLD}本周工作{RESET}\n")
 
-        category_order = ["feat", "fix", "refactor", "docs", "test", "chore", "style"]
-        for cat_key in category_order:
+        for cat_key in CATEGORY_ORDER:
             if cat_key not in report.categories:
                 continue
             commits = report.categories[cat_key]
-            label = CATEGORY_PATTERNS.get(cat_key, {}).get("label", cat_key)
+            label = CATEGORY_PATTERNS[cat_key]["label"]
             print(f"  {BOLD}{label}{RESET}")
             for commit in commits:
                 msg = commit.message
@@ -88,10 +89,16 @@ def render_terminal(reports: list):
         print(f"  删除行数  {RED}-{report.stats.total_deletions}{RESET}")
         print()
 
+        if report.ai_summary:
+            print(f"{BOLD}\U0001f916 AI \u603b\u7ed3{RESET}\n")
+            for line in report.ai_summary.strip().splitlines():
+                print(f"  {line}")
+            print()
 
-def render_markdown(reports: list) -> str:
+
+def render_markdown(reports: list[CategorizedReport]) -> str:
     """Render reports as Markdown string."""
-    lines = []
+    lines: list[str] = []
 
     for report in reports:
         date_range = _format_date_range(report.since, report.until)
@@ -110,12 +117,11 @@ def render_markdown(reports: list) -> str:
         lines.append("## 本周工作")
         lines.append("")
 
-        category_order = ["feat", "fix", "refactor", "docs", "test", "chore", "style"]
-        for cat_key in category_order:
+        for cat_key in CATEGORY_ORDER:
             if cat_key not in report.categories:
                 continue
             commits = report.categories[cat_key]
-            label = CATEGORY_PATTERNS.get(cat_key, {}).get("label", cat_key)
+            label = CATEGORY_PATTERNS[cat_key]["label"]
             lines.append(f"### {label}")
             lines.append("")
             for commit in commits:
@@ -131,5 +137,11 @@ def render_markdown(reports: list) -> str:
         lines.append(f"| 新增行数 | +{report.stats.total_insertions} |")
         lines.append(f"| 删除行数 | -{report.stats.total_deletions} |")
         lines.append("")
+
+        if report.ai_summary:
+            lines.append("## \U0001f916 AI \u603b\u7ed3")
+            lines.append("")
+            lines.append(report.ai_summary.strip())
+            lines.append("")
 
     return "\n".join(lines)

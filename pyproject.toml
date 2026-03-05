@@ -1,20 +1,41 @@
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "git-weekly"
-version = "0.1.0"
-description = "Generate weekly reports from Git commit history"
+version = "0.2.0"
+description = "Generate weekly reports from Git commit history, with optional AI summary"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 requires-python = ">=3.9"
-dependencies = [
-    "click>=8.0",
-    "rich>=13.0",
+dependencies = []
+authors = [
+    {name = "woaichilajiaochaorou"},
+]
+keywords = ["git", "weekly", "report", "changelog", "productivity", "ai", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Version Control :: Git",
 ]
 
+[project.urls]
+Homepage = "https://github.com/woaichilajiaochaorou/git-weekly"
+Repository = "https://github.com/woaichilajiaochaorou/git-weekly"
+Issues = "https://github.com/woaichilajiaochaorou/git-weekly/issues"
+
 [project.optional-dependencies]
+ai = [
+    "openai>=1.0",
+]
 dev = [
     "pytest>=7.0",
     "ruff>=0.4",

@@ -7,7 +7,48 @@ import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional
+
+COMMIT_SEPARATOR = "\x00"
+COMMIT_FORMAT = "%H%x00%an%x00%aI%x00%s"
+
+CATEGORY_PATTERNS: dict[str, dict[str, object]] = {
+    "feat": {
+        "keywords": ["add", "feat", "feature", "new", "implement", "support", "create"],
+        "label": "\U0001f680 新功能",
+    },
+    "fix": {
+        "keywords": ["fix", "bug", "patch", "resolve", "close", "repair", "correct"],
+        "label": "\U0001f41b Bug 修复",
+    },
+    "refactor": {
+        "keywords": ["refactor", "restructure", "reorganize", "clean", "simplify", "extract",
+                      "move", "rename", "optimize"],
+        "label": "\u267b\ufe0f 重构",
+    },
+    "docs": {
+        "keywords": ["doc", "readme", "comment", "changelog", "license"],
+        "label": "\U0001f4dd 文档",
+    },
+    "test": {
+        "keywords": ["test", "spec", "coverage", "mock", "assert"],
+        "label": "\U0001f9ea 测试",
+    },
+    "chore": {
+        "keywords": ["chore", "ci", "cd", "build", "deploy", "config", "deps", "bump",
+                      "upgrade", "update dep", "docker", "makefile", "lint"],
+        "label": "\U0001f527 工程化",
+    },
+    "style": {
+        "keywords": ["style", "format", "indent", "whitespace", "prettier", "eslint"],
+        "label": "\U0001f3a8 代码风格",
+    },
+    "other": {
+        "keywords": [],
+        "label": "\U0001f4e6 其他",
+    },
+}
+
+CATEGORY_ORDER: list[str] = ["feat", "fix", "refactor", "docs", "test", "chore", "style", "other"]
 
 
 @dataclass
@@ -19,14 +60,14 @@ class CommitInfo:
     files_changed: int = 0
     insertions: int = 0
     deletions: int = 0
-    files: List[str] = field(default_factory=list)
+    files: list[str] = field(default_factory=list)
 
 
 @dataclass
 class RepoStats:
     repo_path: str
     repo_name: str
-    commits: List[CommitInfo] = field(default_factory=list)
+    commits: list[CommitInfo] = field(default_factory=list)
     total_files_changed: int = 0
     total_insertions: int = 0
     total_deletions: int = 0
@@ -34,40 +75,6 @@ class RepoStats:
     @property
     def total_commits(self) -> int:
         return len(self.commits)
-
-
-CATEGORY_PATTERNS = {
-    "feat": {
-        "keywords": ["add", "feat", "feature", "new", "implement", "support", "create"],
-        "label": "🚀 新功能",
-    },
-    "fix": {
-        "keywords": ["fix", "bug", "patch", "resolve", "close", "repair", "correct"],
-        "label": "🐛 Bug 修复",
-    },
-    "refactor": {
-        "keywords": ["refactor", "restructure", "reorganize", "clean", "simplify", "extract",
-                      "move", "rename", "optimize"],
-        "label": "♻️ 重构",
-    },
-    "docs": {
-        "keywords": ["doc", "readme", "comment", "changelog", "license"],
-        "label": "📝 文档",
-    },
-    "test": {
-        "keywords": ["test", "spec", "coverage", "mock", "assert"],
-        "label": "🧪 测试",
-    },
-    "chore": {
-        "keywords": ["chore", "ci", "cd", "build", "deploy", "config", "deps", "bump",
-                      "upgrade", "update dep", "docker", "makefile", "lint"],
-        "label": "🔧 工程化",
-    },
-    "style": {
-        "keywords": ["style", "format", "indent", "whitespace", "prettier", "eslint"],
-        "label": "🎨 代码风格",
-    },
-}
 
 
 def _run_git(args: list[str], cwd: str) -> str:
@@ -103,7 +110,7 @@ def parse_commits(
     repo_path: str,
     since: str,
     until: str,
-    author: Optional[str] = None,
+    author: str | None = None,
 ) -> RepoStats:
     """Parse git log and return structured commit data."""
     repo_path = str(Path(repo_path).resolve())
@@ -113,7 +120,7 @@ def parse_commits(
         "log",
         f"--since={since}",
         f"--until={until}",
-        "--format=%H|%an|%aI|%s",
+        f"--format={COMMIT_FORMAT}",
         "--numstat",
     ]
     if author:
@@ -124,16 +131,16 @@ def parse_commits(
         return RepoStats(repo_path=repo_path, repo_name=repo_name)
 
     stats = RepoStats(repo_path=repo_path, repo_name=repo_name)
-    commits = []
-    current_commit = None
+    commits: list[CommitInfo] = []
+    current_commit: CommitInfo | None = None
 
     for line in raw.split("\n"):
         if not line:
             continue
 
-        if "|" in line and len(line.split("|")) >= 4:
-            parts = line.split("|", 3)
-            if len(parts[0]) == 40:  # SHA hash
+        if COMMIT_SEPARATOR in line:
+            parts = line.split(COMMIT_SEPARATOR, 3)
+            if len(parts) == 4 and len(parts[0]) == 40:
                 if current_commit:
                     commits.append(current_commit)
                 current_commit = CommitInfo(
@@ -173,28 +180,29 @@ def categorize_commit(commit: CommitInfo) -> str:
     """Categorize a commit based on its message using keyword matching."""
     msg = commit.message.lower()
 
-    # conventional commits prefix (e.g., "feat:", "fix(scope):")
     prefix_match = re.match(r"^(\w+)[\(:]", msg)
     if prefix_match:
         prefix = prefix_match.group(1)
         for cat_key in CATEGORY_PATTERNS:
+            if cat_key == "other":
+                continue
             if prefix == cat_key or prefix in CATEGORY_PATTERNS[cat_key]["keywords"]:
                 return cat_key
 
-    # file extension heuristics
     extensions = {Path(f).suffix for f in commit.files}
     if extensions & {".md", ".rst", ".txt"} and not (extensions - {".md", ".rst", ".txt"}):
         return "docs"
-    if all("test" in f.lower() or "spec" in f.lower() for f in commit.files) and commit.files:
+    if commit.files and all("test" in f.lower() or "spec" in f.lower() for f in commit.files):
         return "test"
 
-    # keyword matching in commit message
     for cat_key, cat_info in CATEGORY_PATTERNS.items():
+        if cat_key == "other":
+            continue
         for keyword in cat_info["keywords"]:
             if keyword in msg:
                 return cat_key
 
-    return "feat"  # default to feature
+    return "other"
 
 
 def get_default_since() -> str:
