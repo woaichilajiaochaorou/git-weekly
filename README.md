@@ -9,7 +9,7 @@
 - 生成结构化周报（Markdown / 终端输出）
 - 支持多仓库聚合
 - 代码统计（新增 / 删除 / 修改的文件数）
-- **AI 智能总结**：接入 OpenAI 兼容 API，自动生成连贯的工作总结
+- **AI 智能总结**：接入 OpenAI 兼容 API，基于 commit + diff 内容生成连贯的工作总结
 
 ## 安装
 
@@ -56,6 +56,9 @@ git-weekly --author "your-name"
 git-weekly --ai
 git-weekly --ai --api-key sk-xxx
 git-weekly --ai --base-url https://api.deepseek.com/v1 --model deepseek-chat
+
+# AI 总结但跳过 diff 采集（更快，总结不够细致）
+git-weekly --ai --no-diff
 ```
 
 ## 输出示例
@@ -120,6 +123,16 @@ export GIT_WEEKLY_MODEL=deepseek-chat                    # 可选
 api_key = "sk-xxx"
 base_url = "https://api.openai.com/v1"
 model = "gpt-4o-mini"
+```
+
+### Diff 分析
+
+使用 `--ai` 时，工具会自动采集每个 commit 的代码 diff 内容并发送给 LLM，让 AI 能够理解实际的代码变更而不仅仅是 commit message。Diff 内容会自动截断以控制 token 用量（单个 commit 最多 2KB，总计最多 12KB）。
+
+如果不需要 diff 分析（例如 commit 数量很大时加速），可以使用 `--no-diff`：
+
+```bash
+git-weekly --ai --no-diff
 ```
 
 ### 支持的 LLM 服务
