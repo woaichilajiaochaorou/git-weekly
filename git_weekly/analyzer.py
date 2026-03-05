@@ -14,37 +14,29 @@ COMMIT_FORMAT = "%H%x00%an%x00%aI%x00%s"
 CATEGORY_PATTERNS: dict[str, dict[str, object]] = {
     "feat": {
         "keywords": ["add", "feat", "feature", "new", "implement", "support", "create"],
-        "label": "\U0001f680 新功能",
     },
     "fix": {
         "keywords": ["fix", "bug", "patch", "resolve", "close", "repair", "correct"],
-        "label": "\U0001f41b Bug 修复",
     },
     "refactor": {
         "keywords": ["refactor", "restructure", "reorganize", "clean", "simplify", "extract",
                       "move", "rename", "optimize"],
-        "label": "\u267b\ufe0f 重构",
     },
     "docs": {
         "keywords": ["doc", "readme", "comment", "changelog", "license"],
-        "label": "\U0001f4dd 文档",
     },
     "test": {
         "keywords": ["test", "spec", "coverage", "mock", "assert"],
-        "label": "\U0001f9ea 测试",
     },
     "chore": {
         "keywords": ["chore", "ci", "cd", "build", "deploy", "config", "deps", "bump",
                       "upgrade", "update dep", "docker", "makefile", "lint"],
-        "label": "\U0001f527 工程化",
     },
     "style": {
         "keywords": ["style", "format", "indent", "whitespace", "prettier", "eslint"],
-        "label": "\U0001f3a8 代码风格",
     },
     "other": {
         "keywords": [],
-        "label": "\U0001f4e6 其他",
     },
 }
 

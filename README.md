@@ -59,6 +59,10 @@ git-weekly --ai --base-url https://api.deepseek.com/v1 --model deepseek-chat
 
 # AI 总结但跳过 diff 采集（更快，总结不够细致）
 git-weekly --ai --no-diff
+
+# English output / 英文输出
+git-weekly --lang en
+git-weekly --lang en --ai
 ```
 
 ## 输出示例
@@ -98,9 +102,65 @@ git-weekly --ai --no-diff
   技术层面对数据库操作进行了 Repository 层抽取，提升了代码可维护性。
 ```
 
+### English Output (`--lang en`)
+
+```
+──────────────────────────────────────────────────
+ 📋 Weekly Report (02/24 - 02/28)
+──────────────────────────────────────────────────
+
+Work Summary
+
+  🚀 Features
+    • Implement JWT authentication for user login
+    • Add file upload endpoint with image and PDF support
+
+  🐛 Bug Fixes
+    • Fix pagination returning empty data on last page
+
+Statistics
+
+  Commits  12
+  Files Changed  23 files
+  Insertions  +847
+  Deletions  -312
+```
+
 ## AI 配置
 
-API Key 支持三种配置方式（优先级从高到低）：
+### 快速配置（推荐）
+
+运行交互式配置向导，一步到位：
+
+```bash
+git-weekly init
+```
+
+会引导你选择 LLM 服务商、输入 API Key、选择模型和默认语言，自动生成配置文件。
+
+```
+git-weekly init
+
+选择 LLM 服务商:
+
+  1) OpenAI      https://api.openai.com/v1
+  2) DeepSeek    https://api.deepseek.com/v1
+  3) 通义千问     https://dashscope.aliyuncs.com/compatible-mode/v1
+  4) Ollama      http://localhost:11434/v1
+  5) Custom
+
+请输入编号 [1-5] (默认 1): 2
+Base URL [https://api.deepseek.com/v1]:
+API Key: sk-xxx
+Model [deepseek-chat]:
+默认语言 zh/en [zh]:
+
+✔ 配置已保存至 ~/.config/git-weekly/config.toml
+```
+
+### 手动配置
+
+API Key 也支持以下方式（优先级从高到低）：
 
 **1. 命令行参数**
 
@@ -123,6 +183,9 @@ export GIT_WEEKLY_MODEL=deepseek-chat                    # 可选
 api_key = "sk-xxx"
 base_url = "https://api.openai.com/v1"
 model = "gpt-4o-mini"
+
+[general]
+lang = "zh"
 ```
 
 ### Diff 分析

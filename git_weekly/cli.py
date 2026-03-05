@@ -15,16 +15,123 @@ from .analyzer import (
     get_git_user,
     parse_commits,
 )
+from .i18n import set_lang, t
 from .report import build_report, render_markdown, render_terminal
+
+PROVIDERS = [
+    {"name": "OpenAI", "base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
+    {"name": "DeepSeek", "base_url": "https://api.deepseek.com/v1", "model": "deepseek-chat"},
+    {"name": "通义千问 (Qwen)", "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus"},
+    {"name": "Ollama (local)", "base_url": "http://localhost:11434/v1", "model": "llama3"},
+    {"name": "Custom", "base_url": "", "model": ""},
+]
+
+
+def _init_config() -> None:
+    """Interactive configuration wizard for git-weekly."""
+    from .llm import CONFIG_DIR, CONFIG_FILE
+
+    BOLD = "\033[1m"
+    CYAN = "\033[36m"
+    GREEN = "\033[32m"
+    DIM = "\033[2m"
+    RESET = "\033[0m"
+
+    print(f"\n{BOLD}{CYAN}git-weekly init{RESET}")
+    print(f"{DIM}交互式生成配置文件 {CONFIG_FILE}{RESET}\n")
+
+    # --- Provider selection ---
+    print(f"{BOLD}选择 LLM 服务商:{RESET}\n")
+    for i, p in enumerate(PROVIDERS, 1):
+        hint = f"  {DIM}{p['base_url']}{RESET}" if p["base_url"] else ""
+        print(f"  {BOLD}{i}{RESET}) {p['name']}{hint}")
+    print()
+
+    while True:
+        choice = input(f"请输入编号 [1-{len(PROVIDERS)}] (默认 1): ").strip()
+        if not choice:
+            choice = "1"
+        if choice.isdigit() and 1 <= int(choice) <= len(PROVIDERS):
+            provider = PROVIDERS[int(choice) - 1]
+            break
+        print(f"  无效选项，请输入 1-{len(PROVIDERS)}")
+
+    # --- Base URL ---
+    if provider["base_url"]:
+        custom_url = input(f"Base URL [{provider['base_url']}]: ").strip()
+        base_url = custom_url or provider["base_url"]
+    else:
+        base_url = input("Base URL: ").strip()
+        while not base_url:
+            print("  Base URL 不能为空")
+            base_url = input("Base URL: ").strip()
+
+    # --- API Key ---
+    is_local = "localhost" in base_url or "127.0.0.1" in base_url
+    if is_local:
+        api_key = input(f"API Key {DIM}(本地服务可留空){RESET}: ").strip() or "ollama"
+    else:
+        api_key = input("API Key: ").strip()
+        while not api_key:
+            print("  API Key 不能为空")
+            api_key = input("API Key: ").strip()
+
+    # --- Model ---
+    default_model = provider["model"] or "gpt-4o-mini"
+    model = input(f"Model [{default_model}]: ").strip() or default_model
+
+    # --- Language ---
+    lang = ""
+    while lang not in ("zh", "en"):
+        lang = input("默认语言 zh/en [zh]: ").strip() or "zh"
+
+    # --- Report style ---
+    style = ""
+    while style not in ("dev", "manager"):
+        style = input("AI 报告风格 dev(技术)/manager(商业) [dev]: ").strip() or "dev"
+
+    # --- Write config ---
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+    lines = [
+        "[ai]",
+        f'api_key = "{api_key}"',
+        f'base_url = "{base_url}"',
+        f'model = "{model}"',
+        f'style = "{style}"',
+        "",
+        "[general]",
+        f'lang = "{lang}"',
+        "",
+    ]
+    config_text = "\n".join(lines)
+
+    if CONFIG_FILE.exists():
+        print(f"\n{BOLD}配置文件已存在:{RESET} {CONFIG_FILE}")
+        overwrite = input("是否覆盖? [y/N]: ").strip().lower()
+        if overwrite not in ("y", "yes"):
+            print("已取消。")
+            return
+
+    CONFIG_FILE.write_text(config_text, encoding="utf-8")
+    print(f"\n{GREEN}✔ 配置已保存至 {CONFIG_FILE}{RESET}")
+    print(f"\n{DIM}现在可以直接运行:{RESET}")
+    print(f"  {BOLD}git-weekly --ai{RESET}")
+    print()
 
 
 def main():
     """Generate weekly report from Git commit history."""
+    if len(sys.argv) >= 2 and sys.argv[1] == "init":
+        _init_config()
+        return
+
     parser = argparse.ArgumentParser(
         description="Generate weekly report from Git commit history.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""\
 examples:
+  git-weekly init                               # 交互式配置 AI 参数
   git-weekly                                    # 当前仓库本周周报
   git-weekly --since 2025-02-24 --until 2025-02-28
   git-weekly --repo /path/to/project
@@ -33,6 +140,8 @@ examples:
   git-weekly --all-authors                      # 包含所有人的提交
   git-weekly --ai                               # AI 智能总结
   git-weekly --ai --base-url https://api.deepseek.com/v1  # 用 DeepSeek
+  git-weekly --ai --style manager               # 面向管理层的商业化周报
+  git-weekly --lang en                          # English output
 """,
     )
     parser.add_argument(
@@ -79,8 +188,22 @@ examples:
         "--no-diff", action="store_true", default=False,
         help="Skip collecting diff content (faster, but AI summary less detailed)",
     )
+    parser.add_argument(
+        "--lang", default="zh", choices=["zh", "en"],
+        help="Output language: zh (Chinese, default) or en (English)",
+    )
+    parser.add_argument(
+        "--style", default="dev", choices=["dev", "manager"],
+        help="AI summary style: dev (technical, default) or manager (business-oriented)",
+    )
 
     args = parser.parse_args()
+
+    lang = args.lang
+    if lang == "zh" and "--lang" not in sys.argv:
+        from .llm import load_general_config
+        lang = load_general_config().get("lang", "zh")
+    set_lang(lang)
 
     repos = args.repo or ["."]
     since = args.since or get_default_since()
@@ -96,13 +219,13 @@ examples:
         if name or email:
             author_aliases = find_author_aliases(first_repo, name, email)
         if not author_aliases:
-            print("Warning: could not detect git user, showing all authors", file=sys.stderr)
+            print(t("warn.no_git_user"), file=sys.stderr)
 
     reports = []
     for repo_path in repos:
         resolved = str(Path(repo_path).resolve())
         if not Path(resolved, ".git").exists():
-            print(f"Error: {repo_path} is not a git repository", file=sys.stderr)
+            print(t("warn.not_git_repo", path=repo_path), file=sys.stderr)
             sys.exit(1)
 
         try:
@@ -128,7 +251,7 @@ examples:
             sys.exit(1)
 
     if not reports:
-        print("No repositories to analyze.", file=sys.stderr)
+        print(t("warn.no_repos"), file=sys.stderr)
         sys.exit(0)
 
     if args.ai:
@@ -136,24 +259,27 @@ examples:
             for report in reports:
                 collect_diffs(report.stats)
         try:
-            from .llm import generate_summary, load_config
+            from .llm import _load_config_file, generate_summary, load_config
 
             llm_cfg = load_config(
                 api_key=args.api_key,
                 base_url=args.base_url,
                 model=args.model,
             )
-            print("Generating AI summary...", file=sys.stderr)
-            summary = generate_summary(reports, llm_cfg)
+            style = args.style
+            if style == "dev" and "--style" not in sys.argv:
+                style = _load_config_file().get("style", "dev")
+            print(t("msg.ai_generating"), file=sys.stderr)
+            summary = generate_summary(reports, llm_cfg, style=style)
             for report in reports:
                 report.ai_summary = summary
         except RuntimeError as e:
-            print(f"AI summary failed: {e}", file=sys.stderr)
+            print(t("msg.ai_failed", error=str(e)), file=sys.stderr)
 
     if args.output:
         md = render_markdown(reports)
         Path(args.output).write_text(md, encoding="utf-8")
-        print(f"Report saved to {args.output}")
+        print(t("msg.saved", path=args.output))
     else:
         render_terminal(reports)
 
