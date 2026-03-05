@@ -101,6 +101,51 @@ def get_git_user(repo_path: str) -> str:
         return ""
 
 
+def get_git_email(repo_path: str) -> str:
+    try:
+        return _run_git(["config", "user.email"], cwd=repo_path)
+    except RuntimeError:
+        return ""
+
+
+def _get_system_username() -> str:
+    """Get the OS-level username for fuzzy author matching."""
+    import getpass
+    return getpass.getuser()
+
+
+def find_author_aliases(repo_path: str, name: str, email: str) -> list[str]:
+    """Find all author names in the repo that likely belong to the current user.
+
+    Matches by: exact name, exact email, or system username appearing in
+    the commit author name or email (handles name changes across machines).
+    """
+    sys_user = _get_system_username().lower()
+
+    try:
+        raw = _run_git(["log", "--format=%an|%ae", "--all"], cwd=repo_path)
+    except RuntimeError:
+        return [name] if name else []
+
+    aliases: set[str] = set()
+    if name:
+        aliases.add(name)
+
+    for line in raw.split("\n"):
+        if "|" not in line:
+            continue
+        commit_name, commit_email = line.rsplit("|", 1)
+        cn_lower = commit_name.lower()
+        ce_lower = commit_email.lower()
+
+        if (name and cn_lower == name.lower()) or \
+           (email and ce_lower == email.lower()) or \
+           (sys_user and (sys_user in cn_lower or sys_user in ce_lower)):
+            aliases.add(commit_name)
+
+    return list(aliases)
+
+
 def get_repo_name(repo_path: str) -> str:
     path = Path(repo_path).resolve()
     try:

@@ -6,7 +6,15 @@ import argparse
 import sys
 from pathlib import Path
 
-from .analyzer import collect_diffs, get_default_since, get_default_until, get_git_user, parse_commits
+from .analyzer import (
+    collect_diffs,
+    find_author_aliases,
+    get_default_since,
+    get_default_until,
+    get_git_email,
+    get_git_user,
+    parse_commits,
+)
 from .report import build_report, render_markdown, render_terminal
 
 
@@ -77,14 +85,18 @@ examples:
     repos = args.repo or ["."]
     since = args.since or get_default_since()
     until = args.until or get_default_until()
-    author = args.author
 
-    if not author and not args.all_authors:
+    author_aliases: list[str] = []
+    if args.author:
+        author_aliases = [args.author]
+    elif not args.all_authors:
         first_repo = str(Path(repos[0]).resolve())
-        author = get_git_user(first_repo)
-        if not author:
+        name = get_git_user(first_repo)
+        email = get_git_email(first_repo)
+        if name or email:
+            author_aliases = find_author_aliases(first_repo, name, email)
+        if not author_aliases:
             print("Warning: could not detect git user, showing all authors", file=sys.stderr)
-            author = None
 
     reports = []
     for repo_path in repos:
@@ -94,7 +106,21 @@ examples:
             sys.exit(1)
 
         try:
-            stats = parse_commits(resolved, since, until, author if not args.all_authors else None)
+            if author_aliases:
+                all_commits = []
+                seen_hashes: set[str] = set()
+                for alias in author_aliases:
+                    stats = parse_commits(resolved, since, until, alias)
+                    for c in stats.commits:
+                        if c.hash not in seen_hashes:
+                            seen_hashes.add(c.hash)
+                            all_commits.append(c)
+                stats.commits = sorted(all_commits, key=lambda c: c.date, reverse=True)
+                stats.total_files_changed = len({f for c in all_commits for f in c.files})
+                stats.total_insertions = sum(c.insertions for c in all_commits)
+                stats.total_deletions = sum(c.deletions for c in all_commits)
+            else:
+                stats = parse_commits(resolved, since, until, None)
             report = build_report(stats, since, until)
             reports.append(report)
         except RuntimeError as e:
