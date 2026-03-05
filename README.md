@@ -1,6 +1,8 @@
 # git-weekly
 
-从 Git 提交记录自动生成周报，支持 AI 智能总结。告别"我这周干了啥"的灵魂拷问。
+> Generate weekly reports from Git commits, with AI-powered summary.
+>
+> 从 Git 提交记录自动生成周报，支持 AI 智能总结。告别"我这周干了啥"的灵魂拷问。
 
 ## 功能
 
@@ -9,7 +11,10 @@
 - 生成结构化周报（Markdown / 终端输出）
 - 支持多仓库聚合
 - 代码统计（新增 / 删除 / 修改的文件数）
+- **多语言支持**：中文 / English（`--lang en`）
+- **交互式配置**：`git-weekly init` 一键配置 AI 参数
 - **AI 智能总结**：接入 OpenAI 兼容 API，基于 commit + diff 内容生成连贯的工作总结
+- **Cursor Agent Skill**：在 Cursor IDE 中直接让 AI 助手生成周报
 
 ## 安装
 
@@ -31,11 +36,29 @@ cd git-weekly
 pip install -e ".[ai]"
 ```
 
+## 快速开始
+
+```bash
+# 1. 安装
+pip install git-weekly
+
+# 2. 生成周报
+git-weekly
+
+# 3. (可选) 配置 AI 总结
+pip install "git-weekly[ai]"
+git-weekly init
+git-weekly --ai
+```
+
 ## 使用
 
 ```bash
 # 生成本周周报（默认当前仓库）
 git-weekly
+
+# 交互式配置 AI 参数
+git-weekly init
 
 # 指定时间范围
 git-weekly --since "2025-02-24" --until "2025-02-28"
@@ -208,6 +231,22 @@ git-weekly --ai --no-diff
 | DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
 | 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
 | Ollama (本地) | `http://localhost:11434/v1` | `llama3` |
+
+## Cursor Agent Skill
+
+本项目内置了 Cursor Agent Skill（`.cursor/skills/git-weekly/`），在 Cursor IDE 中可以直接让 AI 助手帮你生成周报：
+
+- "帮我生成本周周报"
+- "generate my weekly report"
+- "用 AI 总结一下我这周的工作"
+
+Cursor 会自动识别 Skill 并调用 `git-weekly` 命令。
+
+如需在所有项目中使用，可将 Skill 复制到个人目录：
+
+```bash
+cp -r .cursor/skills/git-weekly ~/.cursor/skills/
+```
 
 ## 开发
 
